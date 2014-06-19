@@ -1,0 +1,19 @@
+# Online trial configuration file
+
+DEBUG = True
+SERVER_NAME = 'localhost:5000'
+POSTGRES_DSN = 'dbname=XXX'
+
+RAVELLO_USERNAME = 'email'
+RAVELLO_PASSWORD = 'password'
+
+BLUEPRINT_ID = '12345'
+CLOUDINIT = False
+SSH_KEY = 'id_trial'
+
+PUBLISH_CLOUD = 'AMAZON'
+PUBLISH_REGION = 'Virginia'
+PUBLISH_OPTIMIZATION = 'PERFORMANCE_OPTIMIZED'
+
+WAITFOR = 'http:300'
+REBOOT = False

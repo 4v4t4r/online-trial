@@ -1,0 +1,71 @@
+{% include '_header.html' %}
+
+<div class="navbar navbar-inverse navbar-static-top">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">Acme Stack</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <h1> Status of your trial </h1>
+
+  <div class="row"> <div class="col-sm-11">
+
+  <p id="p_intro"> Your trial is currently launching. It may take up to
+  <strong>15 minutes</strong> before it is done. This page refreshes
+  automatically. </p>
+
+  <p id="p_ready" style="display: none"> Your trial is ready to use.</p>
+
+  <p> This address of this page contains a unique identifier for your trial.
+  Please bookmark this page so that you can get back to it later. There is no
+  need for a username or a password. To share this page with a colleague,
+  simply email the link. </p>
+
+  </div> </div>
+
+  <div class="row margin-top-30">
+    <div class="col-sm-2"> Created </div>
+    <div class="col-sm-8"> {{ created_at | date }} </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> Expires </div>
+    <div class="col-sm-8"> {{ expires_in | interval }} </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> Status </div>
+    <div class="col-sm-8"> <span id="sp_status"></span> </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> Management UI </div>
+    <div class="col-sm-8"> <span id="sp_http_url"></span> </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> SSH access </div>
+    <div class="col-sm-8"> <span id="sp_ssh_addr"></span> </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> SSH key </div>
+    <div class="col-sm-4"> <a href="/trials/{{id}}/key">Download private SSH key</a> </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> VNC Console </div>
+    <div class="col-sm-4"> <span id="sp_vnc_url"></span> </div>
+  </div>
+
+</div>
+
+<script>
+  var dynPoller = window.setTimeout(function() { poll_dyn('{{id}}'); }, 1000);
+</script>
+
+{% include '_footer.html' %}

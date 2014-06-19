@@ -1,0 +1,6 @@
+flask
+psycopg2
+pytz
+redis
+rq
+ravello-sdk

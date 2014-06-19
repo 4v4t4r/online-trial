@@ -1,0 +1,46 @@
+{% include '_header.html' %}
+
+<div class="navbar navbar-inverse navbar-static-top">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">Acme Stack</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="row">
+    <div class="col-sm-12">
+      <h1> Welcome to Acme Stack! </h1>
+      <p> We are the most advanced OpenStack in business. Please fill out the
+      form below and you will be able to get <strong>instant</strong> access to
+      an <em>Online Trial</em> verion of AcmeStack! </p>
+    </div>
+  </div>
+
+  <form id="fregister" class="form-horizontal" role="form" autocomplete="off"
+        action="/trials" method="post">
+
+  <div class="row margin-top-50">
+    <div class="col-sm-4 col-sm-offset-1">
+      <div class="form-group has-feedback">
+        <label class="control-label" for="fname"> Full name</label>
+        <input type="text" class="form-control" name="fname" placeholder="Enter full name"/>
+      </div>
+      <div class="form-group has-feedback">
+        <label class="control-label" for="femail">Email address</label>
+        <input type="email" class="form-control" name="femail" placeholder="Enter email address"/>
+      </div>
+    </div>
+    <div class="col-sm-4 col-sm-offset-1">
+      <button type="submit" class="btn btn-lg btn-primary btn-block" disabled>
+          Start your Online Trial<br> Immediately</button>
+    </div>
+  </div>
+
+  </form>
+
+</div>
+
+{% include '_footer.html' %}
