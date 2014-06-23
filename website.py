@@ -21,14 +21,21 @@ import tempfile
 import socket
 import time
 import textwrap
+import base64
+import six
+
+import urllib
 
 from uuid import uuid4
 from subprocess import check_call, Popen, PIPE
 from datetime import datetime, timedelta
+from six.moves.http_client import HTTPSConnection
+from six.moves.urllib_parse import urlencode
 
 import rq
 import pytz
 import psycopg2
+import jinja2
 
 from redis import Redis
 from ravello_sdk import RavelloClient, RavelloError, application_state
@@ -44,6 +51,8 @@ re_name = re.compile('^[^ ]+ [^ ]')
 re_email = re.compile(r'^[a-z0-9._+-]+@([a-z0-9-]+\.)+[a-z]{2,6}$', re.I)
 re_uuid = re.compile('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-'
                      '[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.I)
+
+topdir = os.path.split(__file__)[0]
 
 # Utility functions
 
@@ -208,6 +217,52 @@ def wait_for_service(addr, timeout):
     return False
 
 
+def b64enc(s):
+    """Base-64 encode a string *s*."""
+    if isinstance(s, six.text_type):
+        s = s.encode('ascii')
+    return base64.b64encode(s).decode('ascii')
+
+
+def parse_email(message):
+    """Parse an email with embedded headers."""
+    pos = message.find('\n\n')
+    if pos != -1:
+        header, message = message[:pos], message[pos+2:]
+        fields = [field.split(':') for field in header.splitlines()]
+        headers = dict(((k.lower(), v.strip()) for (k,v) in fields))
+    else:
+        headers = {}
+    return headers, message
+
+
+def send_email(email, template, kwargs):
+    """Send an email via the mailgun service."""
+    maildir = os.path.join(topdir, 'emails')
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(maildir))
+    template = env.get_template(template)
+    rendered = template.render(**kwargs)
+    headers, message = parse_email(rendered)
+    mailargs = {'to': email,
+                'from': app.config['MAIL_FROM'],
+                'bcc': app.config.get('MAIL_BCC'),
+                'text': message}
+    mailargs.update(headers)
+    conn = HTTPSConnection('api.mailgun.net', 443)
+    conn.connect()
+    auth = b64enc('api:{0[MAILGUN_KEY]}'.format(app.config))
+    headers = {'Authorization': 'Basic {0}'.format(auth),
+               'Accept': 'application/json',
+               'Content-type': 'application/x-www-form-urlencoded'}
+    url = '/v2/{0[MAILGUN_DOMAIN]}/messages'.format(app.config)
+    body = urlencode(mailargs)
+    conn.request('POST', url, body, headers)
+    resp = conn.getresponse()
+    if resp.status != 200:
+        raise RuntimeError('could not send email')
+    conn.close()
+
+
 def connect_ssh(addr, privkey, user):
     """Return a ssh instance to a remote server."""
     return Popen(['ssh', '-i', privkey, '-o', 'StrictHostKeyChecking=no',
@@ -252,6 +307,8 @@ def complete_create_trial(uuid):
     fields = qset('ssh_private_key', 'ssh_public_key', 'application_id', 'status')
     cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
     conn.commit()
+    # At this point send the email.
+    send_email(trial['email'], 'registered.txt', trial)
     # Wait for the application to come up
     ravello.wait_for(application, lambda app: application_state(app) == 'STARTED', 600)
     # Wait for ssh to come up.
@@ -309,16 +366,51 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/trials/_/checkemail', methods=['POST'])
+def check_email():
+    """Check if email address exists."""
+    email = request.form.get('email')
+    if not isinstance(email, str):
+        abort(400)
+    cursor = get_cursor()
+    cursor.execute('SELECT id FROM trials WHERE email = %s', (email,))
+    row = cursor.fetchone()
+    return jsonify({'valid': row is None})
+
+
+@app.route('/trials/_/remind', methods=['POST'])
+def send_reminder():
+    """Send an email reminder of the trial ID."""
+    email = request.form.get('email')
+    if not isinstance(email, str):
+        abort(400)
+    cursor = get_cursor()
+    cursor.execute('SELECT * FROM trials WHERE email = %s', (email,))
+    row = cursor.fetchone()
+    if not row:
+        abort(400)
+    trial = rowdict(row, cursor.description)
+    queue = get_job_queue()
+    queue.enqueue_call(send_email, (trial['email'], 'reminder.txt', trial))
+    response = make_response()
+    response.status_code = 204  # No content
+    return response
+
+
 @app.route('/trials', methods=['POST'])
 def create_trial():
     """Create a new trial."""
-    name = request.form.get('fname')
+    name = request.form.get('name')
     if not isinstance(name, str) or not re_name.match(name) or len(name) > 120:
         abort(400)
-    email = request.form.get('femail')
+    email = request.form.get('email')
     if not isinstance(email, str) or not re_email.match(email) or len(email) > 120:
         abort(400)
     cursor = get_cursor()
+    cursor.execute('SELECT id FROM trials WHERE email = %s', (email,))
+    row = cursor.fetchone()
+    if row is not None:
+        abort(400)
     trial = {'id': str(uuid4()),
              'name': name,
              'email': email,

@@ -1,5 +1,5 @@
 $(document).ready(function() {
-    $('#fregister').bootstrapValidator({
+    $('#f_register').bootstrapValidator({
         message: 'This value is not valid',
         feedbackIcons: {
             valid: 'glyphicon glyphicon-ok',
@@ -7,16 +7,18 @@ $(document).ready(function() {
         },
         live: 'enabled',
         fields: {
-            fname: {
+            name: {
                 validators: {
                     notEmpty: { message: 'Field cannot be empty' },
                     regexp: { regexp: '^[^ ]+ [^ ]+', message: 'Please enter your FULL name' }
                 }
             },
-            femail: {
+            email: {
                 validators: {
                     notEmpty: { message: 'Field canot be empty' },
-                    emailAddress: { message: 'Please enter a valid email address' }
+                    emailAddress: { message: 'Please enter a valid email address' },
+                    remote: { message: 'Already registered. Click <a href="javascript:send_reminder()">here</a> to retrieve your trial details.',
+                              url: '/trials/_/checkemail' }
                 }
             }
         }
@@ -52,4 +54,23 @@ function poll_dyn(id)
 {
     var url = '/trials/' + id + '/dyn';
     $.ajax(url, {type: 'GET', dataType: 'json', success: on_dyn_poll_result});
+}
+
+function on_reminder_result(data, status, xhr)
+{
+    $('#reminder_modal .modal-body').html('Email was sent succesfully');
+    $('#reminder_modal').modal('show');
+}
+
+function on_reminder_error(xhr, status, error)
+{
+    $('#reminder_modal .modal-body').html('Error sending email');
+    $('#reminder_modal').modal('show');
+}
+
+function send_reminder()
+{
+    var email = $('#f_register input[name=email]').val();
+    $.ajax('/trials/_/remind', {data: {email: email}, type: 'POST',
+                                success: on_reminder_result,  error: on_reminder_error});
 }

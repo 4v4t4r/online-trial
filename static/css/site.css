@@ -6,4 +6,7 @@ body {
 .margin-top-30 { margin-top: 30px; }
 .margin-top-50 { margin-top: 50px; }
 
-form#fregister button { height: 120px;  margin-top: 20px; }
+form#f_register button { height: 120px;  margin-top: 20px; }
+
+.modal.fade { top: 30%; }
+.modal.fade.in { top: 30%; }

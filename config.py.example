@@ -17,3 +17,9 @@ PUBLISH_OPTIMIZATION = 'PERFORMANCE_OPTIMIZED'
 
 WAITFOR = 'http:300'
 REBOOT = False
+
+MAIL_FROM = 'me@example.com'
+MAIL_BCC = 'bcc@example.com'
+
+MAILGUN_KEY = 'xxxxx'
+MAILGUN_DOMAIN = 'example.com'

@@ -4,3 +4,4 @@ pytz
 redis
 rq
 ravello-sdk
+six
