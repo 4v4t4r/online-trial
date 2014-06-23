@@ -1,0 +1,9 @@
+Subject: Your online trial details
+
+You requested the detail of your online trial. You can manage you online trial
+at the following location:
+
+  http://try.rvlo.cc/trials/{{ id }}
+
+--
+This email was sent automatically on behalf of the Ravello Systems team

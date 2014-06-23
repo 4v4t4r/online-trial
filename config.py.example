@@ -7,16 +7,28 @@ POSTGRES_DSN = 'dbname=XXX'
 RAVELLO_USERNAME = 'email'
 RAVELLO_PASSWORD = 'password'
 
-BLUEPRINT_ID = '12345'
-CLOUDINIT = False
-SSH_KEY = 'id_trial'
+TRIALS = ['acme']
+
+ACME_TITLE = 'Acme Stack'
+ACME_HEADER = 'Welcome to Acme Stack!'
+ACME_INTRO = 'We are the most advanced OpenStack in business. Please fill out the form below and you will be able to get <strong>instant</strong> access to an <em>Online Trial</em> verion of AcmeStack!' 
+ACME_DURATION = 21
+ACME_AUTOSTOP = 10
+ACME_BLUEPRINT = '48726195'
+ACME_CLOUDINIT = False
+ACME_SSH_KEY = 'keys/id_trial'
+ACME_SSH_TIMEOUT = 300
+ACME_SERVICE = 'http'
+ACME_SERVICE_TIMEOUT = 300
+ACME_REBOOT = True
+ACME_REBOOT_DELAY = 120
+ACME_REBOOT_TIMEOUT = 30
+ACME_FINAL_DELAY = 300
+ACME_TOTAL_TIME = 20
 
 PUBLISH_CLOUD = 'AMAZON'
 PUBLISH_REGION = 'Virginia'
 PUBLISH_OPTIMIZATION = 'PERFORMANCE_OPTIMIZED'
-
-WAITFOR = 'http:300'
-REBOOT = False
 
 MAIL_FROM = 'me@example.com'
 MAIL_BCC = 'bcc@example.com'

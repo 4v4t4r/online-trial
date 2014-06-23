@@ -3,7 +3,7 @@
 <div class="navbar navbar-inverse navbar-static-top">
   <div class="container">
     <div class="navbar-header">
-      <a class="navbar-brand" href="/">Acme Stack</a>
+      <a class="navbar-brand" href="/{{ trial_name }}">{{ title }}</a>
     </div>
   </div>
 </div>
@@ -12,15 +12,13 @@
 
   <div class="row">
     <div class="col-sm-12">
-      <h1> Welcome to Acme Stack! </h1>
-      <p> We are the most advanced OpenStack in business. Please fill out the
-      form below and you will be able to get <strong>instant</strong> access to
-      an <em>Online Trial</em> verion of AcmeStack! </p>
+      <h1>{{ header }}</h1>
+      <p>{{ intro | safe }}</p>
     </div>
   </div>
 
   <form id="f_register" class="form-horizontal" role="form" autocomplete="off"
-        action="/trials" method="post">
+    action="/trials/{{ trial_name }}" method="post">
 
   <div class="row margin-top-50">
     <div class="col-sm-4 col-sm-offset-1">
@@ -43,19 +41,6 @@
 
 </div>
 
-<div id="reminder_modal" class="modal fade">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal">&times;</button>
-        <h4>Status of your request</h4>
-      </div>
-      <div class="modal-body"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include '_message.html' %}
 
 {% include '_footer.html' %}

@@ -3,7 +3,7 @@
 <div class="navbar navbar-inverse navbar-static-top">
   <div class="container">
     <div class="navbar-header">
-      <a class="navbar-brand" href="/">Acme Stack</a>
+      <a class="navbar-brand" href="/{{ trial_name }}">{{ title }}</a>
     </div>
   </div>
 </div>
@@ -15,8 +15,8 @@
   <div class="row"> <div class="col-sm-11">
 
   <p id="p_intro"> Your trial is currently launching. It may take up to
-  <strong>15 minutes</strong> before it is done. This page refreshes
-  automatically. </p>
+  <strong>{{ total_time }} minutes</strong> before it is done. This page
+  refreshes automatically. </p>
 
   <p id="p_ready" style="display: none"> Your trial is ready to use.</p>
 
@@ -34,7 +34,12 @@
 
   <div class="row">
     <div class="col-sm-2"> Expires </div>
-    <div class="col-sm-8"> {{ expires_in | interval }} </div>
+    <div class="col-sm-8"> <span id="sp_expires"></span> </div>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-2"> Autostop </div>
+    <div class="col-sm-8"> <span id="sp_autostop"></span> </div>
   </div>
 
   <div class="row">
@@ -67,5 +72,7 @@
 <script>
   var dynPoller = window.setTimeout(function() { poll_dyn('{{id}}'); }, 1000);
 </script>
+
+{% include '_message.html' %}
 
 {% include '_footer.html' %}

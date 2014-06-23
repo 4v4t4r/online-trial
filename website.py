@@ -279,16 +279,17 @@ def complete_create_trial(uuid):
     if row is None:
         raise ValueError('trial {!r} does not exist'.format(uuid))
     trial = rowdict(row, cursor.description)
+    trial_cfg = cfgdict(app.config, trial['trial_name'])
     trial['ssh_private_key'], trial['ssh_public_key'] = generate_keypair()
     ravello = connect_ravello()
-    blueprint_id = app.config['BLUEPRINT_ID']
+    blueprint_id = trial_cfg['blueprint']
     application = {'name': 'trial-{}'.format(uuid),
-                   'description': 'Online trial',
+                   'description': 'Trial ({0})'.format(trial['trial_name']),
                    'baseBlueprintId': blueprint_id}
     application = ravello.create_application(application)
     trial['application_id'] = application['id']
     # If cloudinit is available, we can use that to deploy the ssh key.
-    cloudinit = app.config['CLOUDINIT']
+    cloudinit = trial_cfg['cloudinit']
     if cloudinit:
         pubkey = {'name': 'trial-{}'.format(uuid),
                   'publicKey': trial['ssh_public_key']}
@@ -296,6 +297,14 @@ def complete_create_trial(uuid):
         for vm in application.get('design', {}).get('vms', []):
             vm['keypairId'] = pubkey['id']
         application = ravello.update_application(application)
+    autostop = trial_cfg.get('autostop')
+    if autostop:
+        exp_req = {'expirationFromNowSeconds': autostop*3600}
+        ravello.set_application_expiration(application, exp_req)
+        nowutc = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        trial['autostop_at'] = nowutc + timedelta(seconds=autostop*3600)
+    else:
+        trial['autostop_at'] = None
     publish_cfg = cfgdict(app.config, 'publish')
     publish_req = {'preferredCloud': publish_cfg.get('cloud'),
                    'preferredRegion': publish_cfg.get('region'),
@@ -304,7 +313,8 @@ def complete_create_trial(uuid):
     publish_req = dict(((k,v) for k,v in publish_req.items() if v is not None))
     ravello.publish_application(application['id'], publish_req)
     trial['status'] = 'BUILDING'
-    fields = qset('ssh_private_key', 'ssh_public_key', 'application_id', 'status')
+    fields = qset('ssh_private_key', 'ssh_public_key', 'application_id',
+                  'status', 'autostop_at')
     cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
     conn.commit()
     # At this point send the email.
@@ -314,10 +324,11 @@ def complete_create_trial(uuid):
     # Wait for ssh to come up.
     application = ravello.reload(application)
     ssh_addr = get_service_addr(application, 'ssh')
-    if not wait_for_service(ssh_addr[:2], 300):
-        raise RuntimeError('ssh did not come up within 900 seconds')
+    ssh_timeout = trial_cfg.get('ssh_timeout', 300)
+    if not wait_for_service(ssh_addr[:2], ssh_timeout):
+        raise RuntimeError('error waiting for ssh service')
     if not cloudinit:
-        privkey = app.config['SSH_KEY']
+        privkey = trial_cfg['ssh_key']
         ssh = connect_ssh(ssh_addr[:2], privkey, 'root')
         pubkey = trial['ssh_public_key'].rstrip()
         ssh.communicate(textwrap.dedent("""\
@@ -330,27 +341,27 @@ def complete_create_trial(uuid):
         if ssh.returncode != 0:
             raise RuntimeError('error deploying ssh key through ssh')
     # Optionally wait for another service
-    waitfor = app.config.get('WAITFOR')
-    if waitfor:
-        service, timeout = waitfor.split(':')
-        timeout = int(timeout)
+    service = trial_cfg.get('service')
+    if service:
         svc_addr = get_service_addr(application, service)
-        if not wait_for_service(svc_addr[:2], timeout):
+        svc_timeout = trial_cfg.get('service_timeout', 300)
+        if not wait_for_service(svc_addr[:2], svc_timeout):
             raise RuntimeError('error waiting for {!r} service'.format(service))
     # Do we need to reboot?
-    reboot = app.config.get('REBOOT')
+    reboot = trial_cfg.get('reboot')
     if reboot:
-        time.sleep(reboot)
+        time.sleep(trial_cfg.get('reboot_delay', 60))
         ssh = connect_ssh(ssh_addr[:2], privkey, 'root')
         ssh.communicate('shutdown -r now'.encode('ascii'))
         ssh.wait()
-        time.sleep(30)
-        if not wait_for_service(ssh_addr[:2], 600):
+        time.sleep(trial_cfg.get('reboot_timeout', 30))
+        if not wait_for_service(ssh_addr[:2], ssh_timeout):
             raise RuntimeError('ssh did not come up after reboot')
-        # Wait again..
-        if waitfor and not wait_for_service(svc_addr[:2], timeout):
+        # Wait again for the service..
+        if service and not wait_for_service(svc_addr[:2], svc_timeout):
             raise RuntimeError('error waiting for {!r} service'.format(service))
     # Mark as READY!
+    time.sleep(trial_cfg.get('final_delay', 0))
     trial['status'] = 'READY'
     fields = qset('status')
     cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
@@ -361,9 +372,13 @@ def complete_create_trial(uuid):
 
 # Request handlers
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route('/<trial_name>')
+def index(trial_name):
+    if trial_name not in app.config.get('TRIALS', []):
+        abort(404)
+    trial_cfg = cfgdict(app.config, trial_name)
+    trial_cfg['trial_name'] = trial_name
+    return render_template('index.html', **trial_cfg)
 
 
 @app.route('/trials/_/checkemail', methods=['POST'])
@@ -397,9 +412,13 @@ def send_reminder():
     return response
 
 
-@app.route('/trials', methods=['POST'])
-def create_trial():
+@app.route('/trials/<trial_name>', methods=['POST'])
+def create_trial(trial_name):
     """Create a new trial."""
+    if trial_name not in app.config.get('TRIALS', []):
+        abort(404)
+    trial_cfg = cfgdict(app.config, trial_name)
+    trial_cfg['trial_name'] = trial_name
     name = request.form.get('name')
     if not isinstance(name, str) or not re_name.match(name) or len(name) > 120:
         abort(400)
@@ -413,10 +432,11 @@ def create_trial():
         abort(400)
     trial = {'id': str(uuid4()),
              'name': name,
+             'trial_name': trial_name,
              'email': email,
              'status': 'QUEUED'}
     trial['created_at'] = datetime.utcnow().replace(tzinfo=pytz.UTC)
-    days = app.config.get('TRIAL_DURATION', 14)
+    days = trial_cfg.get('duration', 14)
     trial['expires_at'] = trial['created_at'] + timedelta(days=days)
     query = 'INSERT INTO trials ({}) VALUES ({})'.format(qcols(trial), qargs(trial))
     cursor.execute(query, trial)
@@ -436,7 +456,7 @@ def get_trial(uuid):
     if not row:
         abort(404)
     trial = rowdict(row, cursor.description)
-    trial['expires_in'] = trial['expires_at'] - datetime.utcnow().replace(tzinfo=pytz.UTC)
+    trial.update(cfgdict(app.config, trial['trial_name']))
     return render_template('trial.html', **trial)
 
 
@@ -488,6 +508,10 @@ def get_trial_dyn(uuid):
         abort(404)
     trial = rowdict(row, cursor.description)
     meta = {'id': trial['id'], 'status': trial['status']}
+    utcnow = datetime.utcnow().replace(tzinfo=pytz.UTC)
+    meta['expires_in'] = format_interval(trial['expires_at'] - utcnow)
+    if trial['autostop_at']:
+        meta['autostop_in'] = format_interval(trial['autostop_at'] - utcnow)
     if trial['status'] != 'READY':
         return jsonify(meta)
     client = get_ravello_client()
@@ -495,7 +519,15 @@ def get_trial_dyn(uuid):
     deploy = app.get('deployment', {})
     meta['cloud'] = deploy.get('cloud')
     meta['region'] = deploy.get('regionName')
-    meta['status'] = 'READY' if application_state(app) == 'STARTED' else 'STARTING'
+    state = application_state(app)
+    if isinstance(state, list):
+        if 'STARTING' in state:
+            state = 'STARTING'
+        elif 'STOPPING' in state:
+            state = 'STOPPING'
+        else:
+            state = 'UNKNOWN'
+    meta['status'] = state
     addr = get_service_addr(app, 'ssh')
     if addr:
         meta['ssh_addr'] = addr[0]
@@ -505,14 +537,51 @@ def get_trial_dyn(uuid):
     return jsonify(meta)
 
 
+@app.route('/trials/<uuid>/extend')
+def extend_autostop(uuid):
+    """Extend the autostop timer."""
+    if not re_uuid.match(uuid):
+        abort(400)
+    cursor = get_cursor()
+    cursor.execute('SELECT * FROM trials WHERE id = %s', (uuid,))
+    row = cursor.fetchone()
+    if not row:
+        abort(404)
+    trial = rowdict(row, cursor.description)
+    trial_cfg = cfgdict(app.config, trial['trial_name'])
+    autostop = trial_cfg.get('autostop')
+    if not autostop:
+        abort(400)
+    client = get_ravello_client()
+    application = client.get_application(trial['application_id'])
+    exp_req = {'expirationFromNowSeconds': autostop*3600}
+    client.set_application_expiration(application, exp_req)
+    state = application_state(application)
+    if state == 'STOPPED':
+        client.start_application(application)
+    elif state not in ('STARTING', 'STARTED'):
+        abort(400)
+    utcnow = datetime.utcnow().replace(tzinfo=pytz.UTC)
+    trial['autostop_at'] = utcnow + timedelta(seconds=autostop*3600)
+    fields = qset('autostop_at')
+    cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
+    response = make_response()
+    response.status_code = 204  # No content
+    return response
+
+
 @app.template_filter('date')
 def format_date(d):
     return d.strftime('%a, %d %b %Y %H:%M')
 
 
 @app.template_filter('interval')
-def format_date(d):
-    return '{} days, {} hours'.format(d.days, d.seconds // 3600)
+def format_interval(d):
+    r = d + timedelta(seconds=30)  # for rounding
+    if d.days:
+        return '{} days, {} hours'.format(r.days, r.seconds // 3600)
+    else:
+        return '{} hours, {} minutes'.format(r.seconds // 3600, (r.seconds // 60) % 60)
 
 
 # Intialization / finalization
