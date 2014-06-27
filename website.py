@@ -270,6 +270,14 @@ def connect_ssh(addr, privkey, user):
                   '-p', str(addr[1]), addr[0]], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
 
+def filter_ascii(s, maxlen=-1):
+    """Filter ascii characters from s."""
+    s = ''.join(filter(lambda ch: ch.isalnum() or ch in '. ', s))
+    if maxlen >= 0:
+        s = s[:maxlen]
+    return s
+
+
 def complete_create_trial(uuid):
     """Complete the creation of a trial."""
     conn = connect_database()
@@ -283,8 +291,9 @@ def complete_create_trial(uuid):
     trial['ssh_private_key'], trial['ssh_public_key'] = generate_keypair()
     ravello = connect_ravello()
     blueprint_id = trial_cfg['blueprint']
+    description = 'Trial ({0}/{1})'.format(trial['trial_name'], filter_ascii(trial['name']))
     application = {'name': 'trial-{}'.format(uuid),
-                   'description': 'Trial ({0})'.format(trial['trial_name']),
+                   'description': description,
                    'baseBlueprintId': blueprint_id}
     application = ravello.create_application(application)
     trial['application_id'] = application['id']
@@ -320,7 +329,7 @@ def complete_create_trial(uuid):
     # At this point send the email.
     send_email(trial['email'], 'registered.txt', trial)
     # Wait for the application to come up
-    ravello.wait_for(application, lambda app: application_state(app) == 'STARTED', 600)
+    ravello.wait_for(application, lambda app: application_state(app) == 'STARTED', 900)
     # Wait for ssh to come up.
     application = ravello.reload(application)
     ssh_addr = get_service_addr(application, 'ssh')
@@ -364,7 +373,7 @@ def complete_create_trial(uuid):
     time.sleep(trial_cfg.get('final_delay', 0))
     trial['status'] = 'READY'
     fields = qset('status')
-    cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
+    cursor.execute('UPDATE trials SET {} WHERE id = %(id)s'.format(fields), trial)
     conn.commit()
     cursor.close()
     conn.close()
