@@ -5,3 +5,4 @@ redis
 rq
 ravello-sdk
 six
+gunicorn
