@@ -56,14 +56,17 @@ topdir = os.path.split(__file__)[0]
 
 # Utility functions
 
-def cfgdict(config, section=None):
+def cfgdict(config, *sections):
     """Utility function to convert a Flask style config object to a dict used
     for keyword arguments."""
     kwargs = {}
-    prefix = section.upper() + '_' if section else ''
-    for key in config:
-        if key.startswith(prefix):
-            kwargs[key[len(prefix):].lower()] = config[key]
+    prefixes = [section.upper() + '_' for section in sections]
+    if not prefixes:
+        prefixes = ['']
+    for prefix in reversed(prefixes):
+        for key in config:
+            if key.startswith(prefix):
+                kwargs[key[len(prefix):].lower()] = config[key]
     return kwargs
 
 
@@ -139,19 +142,20 @@ def get_job_queue():
     return g.queue
 
 
-def connect_ravello():
+def connect_ravello(trial_name):
     """Return a new Ravello connection."""
     client = RavelloClient()
     client.connect()
-    client.login(**cfgdict(app.config, 'ravello'))
+    kwargs = cfgdict(app.config, '{0}_ravello'.format(trial_name), 'ravello')
+    client.login(**kwargs)
     return client
 
 
-def get_ravello_client():
+def get_ravello_client(trial_name):
     """Return a Ravello client."""
     client = getattr(g, 'ravello', None)
     if client is None:
-        client = connect_ravello()
+        client = connect_ravello(trial_name)
         set_g('ravello', client, client.close)
     return g.ravello
 
@@ -289,7 +293,7 @@ def complete_create_trial(uuid):
     trial = rowdict(row, cursor.description)
     trial_cfg = cfgdict(app.config, trial['trial_name'])
     trial['ssh_private_key'], trial['ssh_public_key'] = generate_keypair()
-    ravello = connect_ravello()
+    ravello = connect_ravello(trial['trial_name'])
     blueprint_id = trial_cfg['blueprint']
     description = 'Trial ({0}/{1})'.format(trial['trial_name'], filter_ascii(trial['name']))
     application = {'name': 'trial-{}'.format(uuid),
@@ -314,7 +318,7 @@ def complete_create_trial(uuid):
         trial['autostop_at'] = nowutc + timedelta(seconds=autostop*3600)
     else:
         trial['autostop_at'] = None
-    publish_cfg = cfgdict(app.config, 'publish')
+    publish_cfg = cfgdict(app.config, '{0}_publish'.format(trial['trial_name']), 'publish')
     publish_req = {'preferredCloud': publish_cfg.get('cloud'),
                    'preferredRegion': publish_cfg.get('region'),
                    'optimizationLevel':  publish_cfg.get('optimization'),
@@ -496,7 +500,7 @@ def get_trial_vnc(uuid):
     if not row:
         abort(404)
     trial = rowdict(row, cursor.description)
-    client = get_ravello_client()
+    client = get_ravello_client(trial['trial_name'])
     app = client.get_application(trial['application_id'])
     addr = get_service_addr(app, 'ssh')
     if not addr:
@@ -523,7 +527,7 @@ def get_trial_dyn(uuid):
         meta['autostop_in'] = format_interval(trial['autostop_at'] - utcnow)
     if trial['status'] != 'READY':
         return jsonify(meta)
-    client = get_ravello_client()
+    client = get_ravello_client(trial['trial_name'])
     app = client.get_application(trial['application_id'])
     deploy = app.get('deployment', {})
     meta['cloud'] = deploy.get('cloud')
@@ -561,7 +565,7 @@ def extend_autostop(uuid):
     autostop = trial_cfg.get('autostop')
     if not autostop:
         abort(400)
-    client = get_ravello_client()
+    client = get_ravello_client(trial['trial_name'])
     application = client.get_application(trial['application_id'])
     exp_req = {'expirationFromNowSeconds': autostop*3600}
     client.set_application_expiration(application, exp_req)
