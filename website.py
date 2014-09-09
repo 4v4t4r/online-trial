@@ -340,8 +340,8 @@ def complete_create_trial(uuid):
     ssh_timeout = trial_cfg.get('ssh_timeout', 300)
     if not wait_for_service(ssh_addr[:2], ssh_timeout):
         raise RuntimeError('error waiting for ssh service')
-    if not cloudinit:
-        privkey = trial_cfg['ssh_key']
+    privkey = trial_cfg.get('ssh_key')
+    if not cloudinit and privkey:
         ssh = connect_ssh(ssh_addr[:2], privkey, 'root')
         pubkey = trial['ssh_public_key'].rstrip()
         ssh.communicate(textwrap.dedent("""\
