@@ -82,7 +82,7 @@ def qargs(*names):
         names = sorted(names[0])
     result = []
     for name in names:
-        result.append('%({})s'.format(name))
+        result.append('%({0})s'.format(name))
     return ', '.join(result)
 
 def qset(*names):
@@ -91,7 +91,7 @@ def qset(*names):
         names = sorted(names[0])
     result = []
     for name in names:
-        result.append('{}=%({})s'.format(name, name))
+        result.append('{0}=%({0})s'.format(name, name))
     return ', '.join(result)
 
 
@@ -296,7 +296,7 @@ def complete_create_trial(uuid):
     ravello = connect_ravello(trial['trial_name'])
     blueprint_id = trial_cfg['blueprint']
     description = 'Trial ({0}/{1})'.format(trial['trial_name'], filter_ascii(trial['name']))
-    application = {'name': 'trial-{}'.format(uuid),
+    application = {'name': 'trial-{0}'.format(uuid),
                    'description': description,
                    'baseBlueprintId': blueprint_id}
     application = ravello.create_application(application)
@@ -304,7 +304,7 @@ def complete_create_trial(uuid):
     # If cloudinit is available, we can use that to deploy the ssh key.
     cloudinit = trial_cfg['cloudinit']
     if cloudinit:
-        pubkey = {'name': 'trial-{}'.format(uuid),
+        pubkey = {'name': 'trial-{0}'.format(uuid),
                   'publicKey': trial['ssh_public_key']}
         pubkey = ravello.create_keypair(pubkey)
         for vm in application.get('design', {}).get('vms', []):
@@ -328,7 +328,7 @@ def complete_create_trial(uuid):
     trial['status'] = 'BUILDING'
     fields = qset('ssh_private_key', 'ssh_public_key', 'application_id',
                   'status', 'autostop_at')
-    cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
+    cursor.execute('UPDATE trials set {0} WHERE id = %(id)s'.format(fields), trial)
     conn.commit()
     # At this point send the email.
     send_email(trial['email'], 'registered.txt', trial)
@@ -346,7 +346,7 @@ def complete_create_trial(uuid):
         pubkey = trial['ssh_public_key'].rstrip()
         ssh.communicate(textwrap.dedent("""\
                 cat >> .ssh/authorized_keys << EOM 
-                {}
+                {0}
                 EOM
                 chmod 600 .ssh/authorized_keys
                 """).format(pubkey).encode('ascii'))
@@ -377,7 +377,7 @@ def complete_create_trial(uuid):
     time.sleep(trial_cfg.get('final_delay', 0))
     trial['status'] = 'READY'
     fields = qset('status')
-    cursor.execute('UPDATE trials SET {} WHERE id = %(id)s'.format(fields), trial)
+    cursor.execute('UPDATE trials SET {0} WHERE id = %(id)s'.format(fields), trial)
     conn.commit()
     cursor.close()
     conn.close()
@@ -398,7 +398,7 @@ def index(trial_name):
 def check_email():
     """Check if email address exists."""
     email = request.form.get('email')
-    if not isinstance(email, str):
+    if not isinstance(email, six.string_types):
         abort(400)
     cursor = get_cursor()
     cursor.execute('SELECT id FROM trials WHERE email = %s', (email,))
@@ -410,7 +410,7 @@ def check_email():
 def send_reminder():
     """Send an email reminder of the trial ID."""
     email = request.form.get('email')
-    if not isinstance(email, str):
+    if not isinstance(email, six.string_types):
         abort(400)
     cursor = get_cursor()
     cursor.execute('SELECT * FROM trials WHERE email = %s', (email,))
@@ -433,10 +433,10 @@ def create_trial(trial_name):
     trial_cfg = cfgdict(app.config, trial_name)
     trial_cfg['trial_name'] = trial_name
     name = request.form.get('name')
-    if not isinstance(name, str) or not re_name.match(name) or len(name) > 120:
+    if not isinstance(name, six.string_types) or not re_name.match(name) or len(name) > 120:
         abort(400)
     email = request.form.get('email')
-    if not isinstance(email, str) or not re_email.match(email) or len(email) > 120:
+    if not isinstance(email, six.string_types) or not re_email.match(email) or len(email) > 120:
         abort(400)
     cursor = get_cursor()
     cursor.execute('SELECT id FROM trials WHERE email = %s', (email,))
@@ -451,7 +451,7 @@ def create_trial(trial_name):
     trial['created_at'] = datetime.utcnow().replace(tzinfo=pytz.UTC)
     days = trial_cfg.get('duration', 14)
     trial['expires_at'] = trial['created_at'] + timedelta(days=days)
-    query = 'INSERT INTO trials ({}) VALUES ({})'.format(qcols(trial), qargs(trial))
+    query = 'INSERT INTO trials ({0}) VALUES ({1})'.format(qcols(trial), qargs(trial))
     cursor.execute(query, trial)
     queue = get_job_queue()
     queue.enqueue_call(complete_create_trial, (trial['id'],), timeout=2000)
@@ -577,7 +577,7 @@ def extend_autostop(uuid):
     utcnow = datetime.utcnow().replace(tzinfo=pytz.UTC)
     trial['autostop_at'] = utcnow + timedelta(seconds=autostop*3600)
     fields = qset('autostop_at')
-    cursor.execute('UPDATE trials set {} WHERE id = %(id)s'.format(fields), trial)
+    cursor.execute('UPDATE trials set {0} WHERE id = %(id)s'.format(fields), trial)
     response = make_response()
     response.status_code = 204  # No content
     return response
@@ -592,9 +592,9 @@ def format_date(d):
 def format_interval(d):
     r = d + timedelta(seconds=30)  # for rounding
     if d.days:
-        return '{} days, {} hours'.format(r.days, r.seconds // 3600)
+        return '{0} days, {1} hours'.format(r.days, r.seconds // 3600)
     else:
-        return '{} hours, {} minutes'.format(r.seconds // 3600, (r.seconds // 60) % 60)
+        return '{0} hours, {1} minutes'.format(r.seconds // 3600, (r.seconds // 60) % 60)
 
 
 # Intialization / finalization
